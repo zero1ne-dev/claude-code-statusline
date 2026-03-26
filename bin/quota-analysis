@@ -1,0 +1,327 @@
+#!/usr/bin/env bash
+# ============================================================================
+# Claude Code - Token & Cost Usage Analyzer
+# ============================================================================
+# Analyzes ~/.claude/projects/**/*.jsonl to show which projects/sessions
+# consumed the most tokens, with estimated cost breakdown.
+#
+# Usage:
+#   quota-analysis              # Top projects by token usage (30 days)
+#   quota-analysis --days 7     # Last 7 days
+#   quota-analysis --sessions   # Per-session breakdown (not grouped)
+#   quota-analysis --today      # Today only
+# ============================================================================
+
+set -euo pipefail
+
+# ============================================================================
+# ARGS
+# ============================================================================
+DAYS=30
+MODE="projects"  # projects | sessions
+LIMIT=15
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --days)     DAYS="$2"; shift 2 ;;
+        --sessions) MODE="sessions"; shift ;;
+        --today)    DAYS=1; shift ;;
+        --limit)    LIMIT="$2"; shift 2 ;;
+        -h|--help)
+            echo "Usage: quota-analysis [--days N] [--sessions] [--today] [--limit N]"
+            exit 0 ;;
+        *) shift ;;
+    esac
+done
+
+# ============================================================================
+# COLORS
+# ============================================================================
+RED=$'\033[31m'; YELLOW=$'\033[33m'; GREEN=$'\033[32m'
+CYAN=$'\033[36m'; BOLD=$'\033[1m'; DIM=$'\033[2m'; RESET=$'\033[0m'
+
+# ============================================================================
+# PRICING (Claude Max / Enterprise — approximate per-token rates in USD)
+# Input tokens (including cache read):  $3/M  → $0.000003/token
+# Cache creation tokens:               $3.75/M → $0.00000375/token
+# Output tokens:                       $15/M  → $0.000015/token
+# (Opus is ~5x more expensive — but we don't have per-entry model info)
+# We use a blended rate based on actual API total / total tokens
+# ============================================================================
+
+PROJECTS_DIR="$HOME/.claude/projects"
+
+if [[ ! -d "$PROJECTS_DIR" ]]; then
+    echo "${RED}Error: ~/.claude/projects not found${RESET}"
+    exit 1
+fi
+
+# ============================================================================
+# GET TOTAL COST FROM API (for cost estimation ratio)
+# ============================================================================
+get_api_total() {
+    local token
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        token=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null | \
+            jq -r '.claudeAiOauth.accessToken // .accessToken // empty' 2>/dev/null)
+    fi
+
+    if [[ -z "${token:-}" ]]; then
+        echo ""
+        return 1
+    fi
+
+    local cache_file="${XDG_CACHE_HOME:-$HOME/.cache}/claude-code-statusline/quota_data_global.cache"
+    if [[ -f "$cache_file" ]]; then
+        local used_cents
+        used_cents=$(jq -r '.used_credits // empty' "$cache_file" 2>/dev/null)
+        if [[ -n "$used_cents" ]]; then
+            echo "scale=2; $used_cents / 100" | bc
+            return 0
+        fi
+    fi
+
+    local response
+    response=$(curl -s --max-time 5 \
+        -H "Authorization: Bearer $token" \
+        -H "anthropic-beta: oauth-2025-04-20" \
+        "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
+
+    local used_cents
+    used_cents=$(echo "$response" | jq -r '.extra_usage.used_credits // empty' 2>/dev/null)
+    if [[ -n "$used_cents" ]]; then
+        echo "scale=2; $used_cents / 100" | bc
+    else
+        echo ""
+    fi
+}
+
+# ============================================================================
+# CUTOFF TIMESTAMP
+# ============================================================================
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    CUTOFF=$(date -v-${DAYS}d -u +"%Y-%m-%dT%H:%M:%SZ")
+else
+    CUTOFF=$(date -d "$DAYS days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
+fi
+
+# ============================================================================
+# SCAN ALL JSONL FILES
+# ============================================================================
+echo ""
+echo "${BOLD}Claude Code Token Usage Analysis${RESET} ${DIM}(last ${DAYS} day(s))${RESET}"
+echo "${DIM}Scanning ~/.claude/projects ...${RESET}"
+
+declare -A PROJECT_INPUT
+declare -A PROJECT_CACHE_CREATE
+declare -A PROJECT_CACHE_READ
+declare -A PROJECT_OUTPUT
+declare -A PROJECT_SESSIONS
+declare -a SESSION_ROWS
+
+total_input=0
+total_cache_create=0
+total_cache_read=0
+total_output=0
+total_sessions=0
+
+while IFS= read -r jsonl_file; do
+    # Decode project name from directory: -Users-brant-workspace-myrepo → ~/workspace/myrepo
+    dir_encoded=$(basename "$(dirname "$jsonl_file")")
+    project_label=$(echo "$dir_encoded" | sed 's|^-Users-[^-]*||' | sed 's|-|/|g' | sed 's|^/||')
+    [[ -z "$project_label" ]] && project_label="(root)"
+    session_id=$(basename "$jsonl_file" .jsonl)
+
+    # Sum tokens from all assistant entries within the time window
+    read -r inp cc cr out session_start < <(
+        jq -r --arg cutoff "$CUTOFF" '
+            select(
+                .type == "assistant" and
+                .message.usage != null and
+                .timestamp >= $cutoff
+            ) |
+            [
+                (.message.usage.input_tokens // 0),
+                (.message.usage.cache_creation_input_tokens // 0),
+                (.message.usage.cache_read_input_tokens // 0),
+                (.message.usage.output_tokens // 0),
+                .timestamp
+            ] | @tsv
+        ' "$jsonl_file" 2>/dev/null | awk '
+        BEGIN { inp=0; cc=0; cr=0; out=0; start="" }
+        {
+            inp += $1; cc += $2; cr += $3; out += $4
+            if (start == "" || $5 < start) start = $5
+        }
+        END { print inp, cc, cr, out, start }
+        '
+    )
+
+    [[ -z "$inp" || "$inp" == "0" ]] && continue
+
+    total_tokens=$((inp + cc + cr + out))
+    [[ "$total_tokens" -eq 0 ]] && continue
+
+    # Accumulate per-project
+    PROJECT_INPUT["$project_label"]=$(( ${PROJECT_INPUT["$project_label"]:-0} + inp ))
+    PROJECT_CACHE_CREATE["$project_label"]=$(( ${PROJECT_CACHE_CREATE["$project_label"]:-0} + cc ))
+    PROJECT_CACHE_READ["$project_label"]=$(( ${PROJECT_CACHE_READ["$project_label"]:-0} + cr ))
+    PROJECT_OUTPUT["$project_label"]=$(( ${PROJECT_OUTPUT["$project_label"]:-0} + out ))
+    PROJECT_SESSIONS["$project_label"]=$(( ${PROJECT_SESSIONS["$project_label"]:-0} + 1 ))
+
+    total_input=$((total_input + inp))
+    total_cache_create=$((total_cache_create + cc))
+    total_cache_read=$((total_cache_read + cr))
+    total_output=$((total_output + out))
+    total_sessions=$((total_sessions + 1))
+
+    # Store session row for --sessions mode
+    if [[ "$MODE" == "sessions" ]]; then
+        SESSION_ROWS+=("$total_tokens|$project_label|$session_id|$session_start")
+    fi
+
+done < <(find "$PROJECTS_DIR" -name "*.jsonl" -not -path "*/subagents/*" 2>/dev/null | sort)
+
+# ============================================================================
+# CALCULATE BLENDED COST RATIO
+# ============================================================================
+grand_total_tokens=$((total_input + total_cache_create + total_cache_read + total_output))
+
+api_total=$(get_api_total 2>/dev/null || echo "")
+cost_per_token=""
+if [[ -n "$api_total" && "$grand_total_tokens" -gt 0 ]]; then
+    # blended rate = total_cost_usd / total_tokens
+    cost_per_token=$(echo "scale=10; $api_total / $grand_total_tokens" | bc 2>/dev/null)
+fi
+
+fmt_tokens() {
+    local t="$1"
+    if [[ "$t" -ge 1000000 ]]; then
+        printf "%.1fM" "$(echo "scale=1; $t / 1000000" | bc)"
+    elif [[ "$t" -ge 1000 ]]; then
+        printf "%.1fK" "$(echo "scale=1; $t / 1000" | bc)"
+    else
+        echo "${t}"
+    fi
+}
+
+fmt_cost() {
+    local tokens="$1"
+    if [[ -n "$cost_per_token" && "$tokens" -gt 0 ]]; then
+        printf "\$%.2f" "$(echo "scale=4; $tokens * $cost_per_token" | bc)"
+    else
+        echo "  n/a"
+    fi
+}
+
+bar_for_pct() {
+    local pct="$1"
+    local width=20
+    local filled=$(( (pct * width + 50) / 100 ))
+    local empty=$((width - filled))
+    local bar=""
+    for ((i=0; i<filled; i++)); do bar+="█"; done
+    for ((i=0; i<empty; i++)); do bar+="░"; done
+    echo "$bar"
+}
+
+color_for_pct() {
+    local pct="$1"
+    if   [[ "$pct" -ge 30 ]]; then echo "$RED"
+    elif [[ "$pct" -ge 15 ]]; then echo "$YELLOW"
+    else echo "$GREEN"
+    fi
+}
+
+# ============================================================================
+# OUTPUT
+# ============================================================================
+echo ""
+
+if [[ "$MODE" == "projects" ]]; then
+    echo "${BOLD}TOP PROJECTS BY TOKEN USAGE${RESET}"
+    echo "${DIM}$(printf '%-40s %8s %8s %6s %8s' 'Project' 'Tokens' 'Est.Cost' 'Sess' 'Output')${RESET}"
+    echo "${DIM}$(printf '%0.s─' {1..75})${RESET}"
+
+    # Sort projects by total tokens descending
+    sorted_projects=()
+    for proj in "${!PROJECT_INPUT[@]}"; do
+        t=$(( PROJECT_INPUT["$proj"] + PROJECT_CACHE_CREATE["$proj"] + PROJECT_CACHE_READ["$proj"] + PROJECT_OUTPUT["$proj"] ))
+        sorted_projects+=("$t|$proj")
+    done
+    IFS=$'\n' sorted_projects=($(sort -rn <<<"${sorted_projects[*]}")); unset IFS
+
+    count=0
+    for entry in "${sorted_projects[@]}"; do
+        [[ $count -ge $LIMIT ]] && break
+        proj="${entry#*|}"
+        t_inp=${PROJECT_INPUT["$proj"]}
+        t_cc=${PROJECT_CACHE_CREATE["$proj"]}
+        t_cr=${PROJECT_CACHE_READ["$proj"]}
+        t_out=${PROJECT_OUTPUT["$proj"]}
+        t_total=$(( t_inp + t_cc + t_cr + t_out ))
+        t_sess=${PROJECT_SESSIONS["$proj"]}
+
+        pct=0
+        [[ "$grand_total_tokens" -gt 0 ]] && pct=$(( t_total * 100 / grand_total_tokens ))
+
+        bar=$(bar_for_pct "$pct")
+        col=$(color_for_pct "$pct")
+        cost=$(fmt_cost "$t_total")
+        tokens_fmt=$(fmt_tokens "$t_total")
+        out_fmt=$(fmt_tokens "$t_out")
+
+        # Truncate project name
+        label="${proj}"
+        [[ ${#label} -gt 38 ]] && label="...${label: -35}"
+
+        printf "${col}%-40s${RESET} %8s %8s %6s %8s  %s%s%s\n" \
+            "$label" "$tokens_fmt" "$cost" "$t_sess" "$out_fmt" \
+            "$col" "$bar" "$RESET"
+        count=$((count + 1))
+    done
+
+else
+    echo "${BOLD}TOP SESSIONS BY TOKEN USAGE${RESET}"
+    echo "${DIM}$(printf '%-38s %-28s %8s %8s' 'Project' 'Session' 'Tokens' 'Est.Cost')${RESET}"
+    echo "${DIM}$(printf '%0.s─' {1..85})${RESET}"
+
+    IFS=$'\n' sorted_sessions=($(sort -rn <<<"${SESSION_ROWS[*]}")); unset IFS
+
+    count=0
+    for row in "${sorted_sessions[@]}"; do
+        [[ $count -ge $LIMIT ]] && break
+        IFS='|' read -r t_total proj sess_id sess_start <<< "$row"
+
+        pct=0
+        [[ "$grand_total_tokens" -gt 0 ]] && pct=$(( t_total * 100 / grand_total_tokens ))
+
+        col=$(color_for_pct "$pct")
+        cost=$(fmt_cost "$t_total")
+        tokens_fmt=$(fmt_tokens "$t_total")
+
+        label="${proj}"
+        [[ ${#label} -gt 36 ]] && label="...${label: -33}"
+        sess_short="${sess_id:0:8}"
+        date_short=$(echo "$sess_start" | cut -c1-16 | tr 'T' ' ')
+
+        printf "${col}%-38s${RESET} %-10s %-17s %8s %8s\n" \
+            "$label" "$sess_short" "$date_short" "$tokens_fmt" "$cost"
+        count=$((count + 1))
+    done
+fi
+
+# ============================================================================
+# SUMMARY
+# ============================================================================
+echo ""
+echo "${DIM}$(printf '%0.s─' {1..75})${RESET}"
+echo "${BOLD}TOTAL${RESET} — ${CYAN}$(fmt_tokens $grand_total_tokens) tokens${RESET} across ${total_sessions} sessions"
+echo "  Input: $(fmt_tokens $total_input)  Cache-create: $(fmt_tokens $total_cache_create)  Cache-read: $(fmt_tokens $total_cache_read)  Output: $(fmt_tokens $total_output)"
+
+if [[ -n "$api_total" ]]; then
+    echo "  Estimated total cost: ${CYAN}\$$api_total${RESET} (from Anthropic API)"
+else
+    echo "  ${DIM}(Cost estimate unavailable — no API access)${RESET}"
+fi
+echo ""
