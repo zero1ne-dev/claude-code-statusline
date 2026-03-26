@@ -103,6 +103,22 @@ cost.alerts.session_threshold = 2.00       # Alert if session cost > $2.00
 cost.alerts.warn_percent = 80              # Yellow warning at 80% of threshold
 cost.alerts.critical_percent = 100         # Red critical at 100% of threshold
 
+# === ENTERPRISE QUOTA PROGRESS BAR ===
+# Visual progress bar for Claude Enterprise team quota tracking.
+# Shows monthly spending against your allocated quota limit.
+#
+# Display format: Quota: [████████░░░░░░░░] 45% $90.00/$200.00
+#
+# Color thresholds: Green (0-50%) → Yellow (50-80%) → Red (80%+)
+features.show_quota_progress = true
+quota.monthly_limit = 200.00              # Your monthly quota in USD
+quota.label = "Quota:"                    # Label prefix
+quota.bar_width = 20                      # Progress bar character width
+quota.fill_char = "█"                     # Filled portion character
+quota.empty_char = "░"                    # Empty portion character
+quota.warn_threshold = 50                 # Yellow warning above this %
+quota.critical_threshold = 80             # Red critical above this %
+
 # Desktop notification settings (optional)
 cost.alerts.desktop_notify = false         # Enable desktop notifications
 cost.alerts.notify_cooldown = 300          # Seconds between repeated notifications (5 min)
@@ -515,53 +531,23 @@ version_info.show_update_indicator = true  # Show ⬆️ when update available
 # Configure 1-9 line statusline with atomic component system
 # Each line can contain any combination of available components
 
-# Number of lines to display (1-9) - SHOWCASING ALL 26 ATOMIC COMPONENTS!
-display.lines = 8
+# Number of lines to display (1-9)
+display.lines = 3
 
-# Line 1: Repository Identity (path, branch, status)
-display.line1.components = ["repo_info"]
+# Line 1: Model Info + Repository Identity
+display.line1.components = ["model_info", "repo_info"]
 display.line1.separator = " │ "
 display.line1.show_when_empty = true
 
-# Line 2: Model + Git Metrics & Versions (model first, then commits, submodules hidden when empty, versions, time)
-display.line2.components = ["model_info", "bedrock_model", "commits", "submodules", "version_info", "time_display"]
+# Line 2: Enterprise Quota Progress Bar
+display.line2.components = ["quota_progress"]
 display.line2.separator = " │ "
-display.line2.show_when_empty = true
+display.line2.show_when_empty = false
 
-# Line 3: Cost Analytics (pure cost line - repo, monthly, weekly, daily, live)
-display.line3.components = ["cost_repo", "cost_monthly", "cost_weekly", "cost_daily", "cost_live"]
+# Line 3: Block Reset Timer
+display.line3.components = ["reset_timer"]
 display.line3.separator = " │ "
-display.line3.show_when_empty = true
-
-# Line 4: Block Metrics + Token Tracking + Context (v2.20.0: total_tokens + context_alert)
-display.line4.components = ["burn_rate", "cache_efficiency", "block_projection", "code_productivity", "context_window"]
-display.line4.separator = " │ "
-display.line4.show_when_empty = true
-
-# Line 5: Usage Reset Timer (detailed reset countdown)
-display.line5.components = ["usage_reset"]
-display.line5.separator = " │ "
-display.line5.show_when_empty = true
-
-# Line 6: Hijri Calendar with Moon Phase, Gregorian Date & Location
-display.line6.components = ["hijri_calendar", "wellness"]
-display.line6.separator = " │ "
-display.line6.show_when_empty = true
-
-# Line 7: Prayer Icon + Prayer Times Only (Fajr, Dhuhr, Asr, Maghrib, Isha)
-display.line7.components = ["prayer_icon", "prayer_times_only"]
-display.line7.separator = " "
-display.line7.show_when_empty = true
-
-# Line 8: MCP Server Status & Session Mode (output style)
-display.line8.components = ["mcp_status", "session_mode"]
-display.line8.separator = " │ "
-display.line8.show_when_empty = true
-
-# Line 9: Available for future expansion
-display.line9.components = []
-display.line9.separator = " │ "
-display.line9.show_when_empty = false
+display.line3.show_when_empty = false
 
 # === AVAILABLE COMPONENTS REFERENCE ===
 # 🔄 SYNC WARNING: This section MUST be kept synchronized with CLAUDE.md
