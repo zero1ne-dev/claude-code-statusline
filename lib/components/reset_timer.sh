@@ -45,7 +45,7 @@ collect_reset_timer_data() {
                         time_str="${mins}m left"
                     fi
 
-                    COMPONENT_RESET_TIMER_INFO="${CONFIG_RESET_LABEL:-⟳ Reset} at ${reset_time} (${time_str})"
+                    COMPONENT_RESET_TIMER_INFO="${CONFIG_RESET_LABEL:-⚠ Limit hit} · ${reset_time} (${time_str})"
                 fi
             fi
         fi

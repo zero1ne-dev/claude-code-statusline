@@ -503,7 +503,7 @@ generate_install_commands() {
                 echo "brew install bun python3 bc jq coreutils"
                 echo
                 echo "Step 3: Re-run statusline installer"
-                echo "bash -c \"\$(curl -sSfL https://raw.githubusercontent.com/rz1989s/claude-code-statusline/$INSTALL_BRANCH/install.sh)\""
+                echo "bash -c \"\$(curl -sSfL https://raw.githubusercontent.com/zero1ne-dev/claude-code-statusline/$INSTALL_BRANCH/install.sh)\""
             elif [[ "$OS_PLATFORM" == "Windows" ]]; then
                 echo "❌ No package manager detected on Windows"
                 echo
@@ -520,7 +520,7 @@ generate_install_commands() {
                 echo "scoop install curl jq bun python bc"
                 echo
                 echo "Step 3: Close and reopen Git Bash, then re-run installer"
-                echo "curl -sSfL https://raw.githubusercontent.com/rz1989s/claude-code-statusline/$INSTALL_BRANCH/install.sh | bash"
+                echo "curl -sSfL https://raw.githubusercontent.com/zero1ne-dev/claude-code-statusline/$INSTALL_BRANCH/install.sh | bash"
             else
                 echo "⚠️ Manual installation required"
                 echo
@@ -564,7 +564,7 @@ show_user_choice_menu() {
                 generate_install_commands
                 echo
                 print_status "Copy the commands above, then re-run this installer:"
-                print_status "bash -c \"\$(curl -sSfL https://raw.githubusercontent.com/rz1989s/claude-code-statusline/$INSTALL_BRANCH/install.sh)\""
+                print_status "bash -c \"\$(curl -sSfL https://raw.githubusercontent.com/zero1ne-dev/claude-code-statusline/$INSTALL_BRANCH/install.sh)\""
                 exit 0
                 ;;
             3)
@@ -670,7 +670,7 @@ show_help() {
     echo "  # Primary method uses raw URLs (no limits), token only for API fallback"
     echo
     echo "For more information, visit:"
-    echo "https://github.com/rz1989s/claude-code-statusline"
+    echo "https://github.com/zero1ne-dev/claude-code-statusline"
     echo
 }
 
@@ -707,7 +707,7 @@ download_lib_tarball() {
     mkdir -p "$local_path"
 
     # GitHub tarball URL - works for any branch
-    local tarball_url="https://github.com/rz1989s/claude-code-statusline/archive/${INSTALL_BRANCH}.tar.gz"
+    local tarball_url="https://github.com/zero1ne-dev/claude-code-statusline/archive/${INSTALL_BRANCH}.tar.gz"
     local temp_tarball="${TMPDIR:-/tmp}/statusline_modules_$$.tar.gz"
     local temp_extract="${TMPDIR:-/tmp}/statusline_extract_$$"
 
@@ -793,7 +793,7 @@ download_lib_api_fallback() {
     local files_downloaded=0
 
     for module in "${essential_modules[@]}"; do
-        local url="https://raw.githubusercontent.com/rz1989s/claude-code-statusline/$INSTALL_BRANCH/lib/$module"
+        local url="https://raw.githubusercontent.com/zero1ne-dev/claude-code-statusline/$INSTALL_BRANCH/lib/$module"
         if curl -fsSL "$url" -o "$local_path/$module" 2>/dev/null && [[ -s "$local_path/$module" ]]; then
             print_status "  ✓ Downloaded $module"
             files_downloaded=$((files_downloaded + 1))
@@ -836,7 +836,7 @@ download_statusline() {
     print_status "Managing statusline version..."
     
     # Version file paths
-    local version_url="https://raw.githubusercontent.com/rz1989s/claude-code-statusline/$INSTALL_BRANCH/version.txt"
+    local version_url="https://raw.githubusercontent.com/zero1ne-dev/claude-code-statusline/$INSTALL_BRANCH/version.txt"
     local local_version_path="$STATUSLINE_DIR/version.txt"
     local current_version=""
     local new_version=""
@@ -931,7 +931,7 @@ download_examples() {
     print_status "📦 Downloading comprehensive configuration template..."
     for config in "${traditional_configs[@]}"; do
         # Download Config.toml to examples/ as reference template
-        local config_url="https://raw.githubusercontent.com/rz1989s/claude-code-statusline/$INSTALL_BRANCH/examples/$config"
+        local config_url="https://raw.githubusercontent.com/zero1ne-dev/claude-code-statusline/$INSTALL_BRANCH/examples/$config"
         local config_path="$EXAMPLES_DIR/$config"
         
         if curl -fsSL "$config_url" -o "$config_path"; then
@@ -946,7 +946,7 @@ download_examples() {
     
     # Download examples README.md
     print_status "📦 Downloading examples documentation..."
-    local readme_url="https://raw.githubusercontent.com/rz1989s/claude-code-statusline/$INSTALL_BRANCH/examples/README.md"
+    local readme_url="https://raw.githubusercontent.com/zero1ne-dev/claude-code-statusline/$INSTALL_BRANCH/examples/README.md"
     local readme_path="$EXAMPLES_DIR/README.md"
     
     if curl -fsSL "$readme_url" -o "$readme_path"; then
@@ -1357,7 +1357,7 @@ download_config_template() {
     print_status "Setting up comprehensive TOML configuration..."
     
     # Download comprehensive config template from repository  
-    local config_template_url="https://raw.githubusercontent.com/rz1989s/claude-code-statusline/$INSTALL_BRANCH/examples/Config.toml"
+    local config_template_url="https://raw.githubusercontent.com/zero1ne-dev/claude-code-statusline/$INSTALL_BRANCH/examples/Config.toml"
     print_status "🔧 Downloading comprehensive Config.toml template..."
     
     if curl -fsSL "$config_template_url" -o "$CONFIG_PATH"; then
@@ -1589,7 +1589,7 @@ main() {
     parse_arguments "$@"
     
     # Set dynamic URLs based on final branch selection
-    REPO_URL="https://raw.githubusercontent.com/rz1989s/claude-code-statusline/$INSTALL_BRANCH/statusline.sh"
+    REPO_URL="https://raw.githubusercontent.com/zero1ne-dev/claude-code-statusline/$INSTALL_BRANCH/statusline.sh"
     
     if [ "$SHOW_HELP" = true ]; then
         show_help

@@ -84,7 +84,7 @@ init_default_config() {
     CONFIG_STATUSLINE_PREFIX="SL:"
     CONFIG_SESSION_PREFIX="S:"
     CONFIG_LIVE_LABEL="LIVE"
-    CONFIG_RESET_LABEL="RESET"
+    CONFIG_RESET_LABEL="⚠ Limit hit"
 
     # Message defaults
     CONFIG_NO_ACTIVE_BLOCK_MESSAGE="No active block"

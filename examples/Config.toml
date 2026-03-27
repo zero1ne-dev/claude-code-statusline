@@ -532,22 +532,17 @@ version_info.show_update_indicator = true  # Show ⬆️ when update available
 # Each line can contain any combination of available components
 
 # Number of lines to display (1-9)
-display.lines = 3
+display.lines = 2
 
 # Line 1: Model Info + Repository Identity
 display.line1.components = ["model_info", "repo_info"]
 display.line1.separator = " │ "
 display.line1.show_when_empty = true
 
-# Line 2: Enterprise Quota Progress Bar
-display.line2.components = ["quota_progress"]
+# Line 2: Enterprise Quota Progress Bar + Rate Limit Timer
+display.line2.components = ["quota_progress", "reset_timer"]
 display.line2.separator = " │ "
 display.line2.show_when_empty = false
-
-# Line 3: Block Reset Timer
-display.line3.components = ["reset_timer"]
-display.line3.separator = " │ "
-display.line3.show_when_empty = false
 
 # === AVAILABLE COMPONENTS REFERENCE ===
 # 🔄 SYNC WARNING: This section MUST be kept synchronized with CLAUDE.md
