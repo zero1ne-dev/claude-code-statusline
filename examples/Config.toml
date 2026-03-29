@@ -105,13 +105,16 @@ cost.alerts.critical_percent = 100         # Red critical at 100% of threshold
 
 # === ENTERPRISE QUOTA PROGRESS BAR ===
 # Visual progress bar for Claude Enterprise team quota tracking.
-# Shows monthly spending against your allocated quota limit.
+# Shows extra usage spending against your quota limit (Enterprise/Team only).
+# Auto-hides when API reports no extra usage (e.g. Max/Pro plans).
+# The limit is read from the API per-member, so no hardcoding needed.
+# Only set monthly_limit manually if you want to override the API value.
 #
 # Display format: Quota: [████████░░░░░░░░] 45% $90.00/$200.00
 #
 # Color thresholds: Green (0-50%) → Yellow (50-80%) → Red (80%+)
 features.show_quota_progress = true
-quota.monthly_limit = 200.00              # Your monthly quota in USD
+# quota.monthly_limit = 200.00            # Uncomment to override API limit
 quota.label = "Quota:"                    # Label prefix
 quota.bar_width = 20                      # Progress bar character width
 quota.fill_char = "█"                     # Filled portion character
